@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.next/
+.source/
+.env*
+.env
+*.tsbuildinfo
+.changeset/*.md
+!.changeset/README.md
+.vitest/
+coverage/
