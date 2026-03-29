@@ -7,7 +7,8 @@
 | **Wallet** | A user's or organization's token balance container with posted, pending, and available amounts | Account, purse, balance |
 | **Wallet Account** | A ledger account that tracks posted/pending/available balances and is one of four account types | Ledger account, balance account |
 | **Account Type** | The classification of a Wallet Account: USER_WALLET, SYSTEM_REVENUE, SYSTEM_ESCROW, or SYSTEM_RESERVE | Account kind, account category |
-| **Reference** | The entity that owns a Wallet — either a user or an organization, identified by referenceId + referenceType | Owner, holder, customer |
+| **Reference** | The entity that owns a Wallet — either a user or an organization, identified by a Reference Key | Owner, holder, customer |
+| **Reference Key** | A single unique string identifying a Reference, formed as `"user:{userId}"` or `"org:{orgId}"` | referenceId, composite key |
 | **Posted Balance** | The settled, confirmed token amount in a Wallet Account | Confirmed balance, settled balance, actual balance |
 | **Pending Debits** | The total tokens currently locked by active Holds in a Wallet Account | Held amount, reserved tokens |
 | **Available Balance** | The tokens free to spend, computed as Posted Balance minus Pending Debits | Free balance, spendable balance |
@@ -47,6 +48,7 @@
 | **SYSTEM_REVENUE** | A Wallet Account that receives tokens when users consume them (the "other side" of a Debit) | Revenue account, income account |
 | **SYSTEM_ESCROW** | A Wallet Account that temporarily holds tokens reserved by active Holds | Escrow account, hold account |
 | **SYSTEM_RESERVE** | A Wallet Account used for refunds and manual adjustments | Reserve account, adjustment account |
+| **System Account Seeding** | The act of creating the three system singleton accounts (REVENUE, ESCROW, RESERVE) on plugin initialization | System init, account setup |
 
 ## Preflight Modes
 
@@ -70,6 +72,14 @@
 | **Optimistic Locking** | A concurrency strategy where writes check the Lock Version and retry if it changed | OCC, version checking |
 | **Pessimistic Locking** | A concurrency strategy where database rows are locked with SELECT FOR UPDATE during reads | Row locking, DB lock |
 
+## Error Handling
+
+| Term | Definition | Aliases to avoid |
+| --- | --- | --- |
+| **Error Code** | A specific string identifier for a failure condition in a wallet operation (e.g., WALLET_NOT_FOUND, INVALID_AMOUNT) | Error type, failure code |
+
+Phase 1 error codes: WALLET_NOT_FOUND, INVALID_AMOUNT, DUPLICATE_IDEMPOTENCY_KEY, SYSTEM_ACCOUNT_MISSING, MISSING_IDEMPOTENCY_KEY, CREDIT_FAILED
+
 ## Relationships
 
 - A **Reference** (user or organization) has exactly one **USER_WALLET** Wallet Account
@@ -84,6 +94,9 @@
 - A **Capture** Voids the Hold and creates a new Transaction that Debits **USER_WALLET** (posted) and Credits **SYSTEM_REVENUE** (posted)
 - An **Available Balance** is always Posted Balance minus Pending Debits
 - A **Wallet** balance can never go below zero (strict prepaid)
+- A **Reference Key** uniquely identifies a **Reference** (format: `"user:{id}"` or `"org:{id}"`)
+- **System Account Seeding** creates three system Wallet Accounts on plugin initialization
+- A **CREDIT_TOPUP** Transaction always involves two entries: DEBIT **SYSTEM_REVENUE** and CREDIT **USER_WALLET**
 
 ## Example dialogue
 
@@ -103,6 +116,20 @@
 >
 > **Domain expert:** "The first **Preflight** succeeds — it reserves 500. The second sees **Available Balance** is now 100, which is insufficient, so it's rejected. If both somehow reach the write simultaneously, **Optimistic Locking** via the **Lock Version** prevents the second write — it retries with the updated balance."
 
+## Example dialogue (Phase 1: Credit Flow)
+
+> **Dev:** "When a **User** signs up, how does their **Wallet** get created?"
+>
+> **Domain expert:** "The plugin registers a **database hook** on user creation. When the **User** is created, a **USER_WALLET** **Wallet Account** is auto-created with the configured **Initial Balance**. If that hook fails for any reason, the **Credit Endpoint** uses a **find-or-create** pattern to self-heal — it creates the missing wallet on the first **Top-Up**."
+>
+> **Dev:** "What if I **Top-Up** 1000 **Tokens** for a **User** — how does the **Double-Entry** work?"
+>
+> **Domain expert:** "The **Credit Endpoint** creates a **CREDIT_TOPUP** **Transaction** with two **Entries**: DEBIT 1000 from **SYSTEM_REVENUE** and CREDIT 1000 to the **USER_WALLET**. Both the **Posted Balance** and **Available Balance** increase by 1000. The **Double-Entry** invariant holds: SUM(debits) = SUM(credits) = 1000."
+>
+> **Dev:** "What if the payment webhook fires twice?"
+>
+> **Domain expert:** "Every **Top-Up** requires an **Idempotency Key**. The second request with the same key finds the existing **Transaction** and returns the original result — no second **Credit**, no balance change."
+
 ## Flagged ambiguities
 
 - **"Account"** was used ambiguously throughout the design conversation — sometimes meaning a Better Auth user account, sometimes a Wallet Account, and sometimes the account types (USER_WALLET, SYSTEM_REVENUE, etc.). **Canonical usage:** "Wallet Account" for the ledger entity, "User" or "Organization" for the Better Auth entity. Never use "account" alone.
@@ -111,3 +138,6 @@
 - **"Balance"** alone is ambiguous — it could mean posted, pending, or available. **Canonical usage:** Always qualify as "Posted Balance", "Pending Debits", or "Available Balance". Never say just "balance".
 - **"Capture" vs "Settle" vs "Postflight"** — Capture is the specific act of resolving a Hold with actual cost. Postflight is the endpoint that triggers Capture. Settle is too vague. **Canonical:** "Capture" for the ledger operation, "Postflight" for the API endpoint.
 - **"Preflight"** is used as both an endpoint name and a concept. The endpoint `/token-wallet/preflight` can operate in Hold Mode or Check Mode — these are distinct strategies, not synonyms for Preflight itself.
+- **"referenceId + referenceType"** was used in the original PRD to identify a Reference as two separate fields. **Canonical usage**: A single **Reference Key** string (e.g., `"user:abc123"`) replaces the two-field approach. The original fields are merged for simplicity and to enable single-field unique constraints.
+- **"Initial Balance"** could mean either the starting column value or a real CREDIT_TOPUP transaction. **Canonical usage**: When `initialBalance > 0`, a real **CREDIT_TOPUP** **Transaction** is created (ledger integrity), not just a column set.
+

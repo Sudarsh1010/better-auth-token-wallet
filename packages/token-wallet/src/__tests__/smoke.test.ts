@@ -6,8 +6,8 @@ describe('token-wallet smoke test', () => {
     expect(typeof tokenWallet).toBe('function');
   });
 
-  it('tokenWallet returns { id: "token-wallet" }', () => {
+  it('tokenWallet returns plugin with id "token-wallet"', () => {
     const result = tokenWallet();
-    expect(result).toEqual({ id: 'token-wallet' });
+    expect(result.id).toBe('token-wallet');
   });
 });
