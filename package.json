@@ -17,5 +17,10 @@
     "typescript": "catalog:",
     "@changesets/cli": "^2.29.0",
     "vitest": "^3.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
   }
 }
