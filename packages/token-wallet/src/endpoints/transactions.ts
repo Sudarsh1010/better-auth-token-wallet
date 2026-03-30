@@ -4,15 +4,9 @@ import {
   APIError,
 } from "better-auth/api";
 import * as z from "zod";
-import { getOrCreateUserWallet } from "../wallet-account/index.js";
+import { findWalletByReference } from "../wallet-account/index.js";
 import { TOKEN_WALLET_ERROR_CODES } from "../error-codes.js";
-import type { WalletAdapter } from "../ledger/index.js";
-
-function getAdapter(ctx: {
-  context: Record<string, unknown>;
-}): WalletAdapter {
-  return ctx.context["adapter"] as unknown as WalletAdapter;
-}
+import { getAdapter } from "../adapter.js";
 
 export function createTransactionsEndpoint(): ReturnType<typeof createAuthEndpoint<any, any, any>> {
   return createAuthEndpoint(
@@ -48,26 +42,46 @@ export function createTransactionsEndpoint(): ReturnType<typeof createAuthEndpoi
       }
 
       const referenceKey = `user:${referenceId}`;
-      const wallet = await getOrCreateUserWallet(adapter, referenceKey, 0);
+      const wallet = await findWalletByReference(adapter, referenceKey);
+      if (!wallet) {
+        throw new APIError("NOT_FOUND", {
+          ...TOKEN_WALLET_ERROR_CODES.WALLET_NOT_FOUND,
+        });
+      }
 
-      const entries = await adapter.findMany({
+      const userEntries = await adapter.findMany({
         model: "walletEntry",
         where: [{ field: "accountId", value: wallet.id }],
       });
 
       const seenTxIds = new Set<string>();
-      for (const entry of entries) {
+      for (const entry of userEntries) {
         seenTxIds.add(entry.transactionId as string);
       }
 
-      const allTransactions = await Promise.all(
-        Array.from(seenTxIds).map(async (txId) => {
-          return adapter.findOne({
-            model: "walletTransaction",
-            where: [{ field: "id", value: txId }],
-          });
-        }),
-      );
+      const txIdArray = Array.from(seenTxIds);
+
+      const [allTransactions, entriesResults] = await Promise.all([
+        Promise.all(
+          txIdArray.map((txId) =>
+            adapter.findOne({
+              model: "walletTransaction",
+              where: [{ field: "id", value: txId }],
+            }),
+          ),
+        ),
+        Promise.all(
+          txIdArray.map(async (txId) => {
+            const entries = await adapter.findMany({
+              model: "walletEntry",
+              where: [{ field: "transactionId", value: txId }],
+            });
+            return [txId, entries] as const;
+          }),
+        ),
+      ]);
+
+      const entriesByTxId = new Map(entriesResults);
 
       allTransactions.sort((a, b) => {
         const aTime = a?.createdAt ? new Date(a.createdAt as string).getTime() : 0;
@@ -78,15 +92,12 @@ export function createTransactionsEndpoint(): ReturnType<typeof createAuthEndpoi
       const total = allTransactions.length;
       const paged = allTransactions.slice(offset, offset + limit);
 
-      const txsWithEntries = await Promise.all(
-        paged.filter((tx): tx is Record<string, unknown> => tx !== null).map(async (tx) => {
-          const txEntries = await adapter.findMany({
-            model: "walletEntry",
-            where: [{ field: "transactionId", value: tx.id }],
-          });
-          return { ...tx, entries: txEntries };
-        }),
-      );
+      const txsWithEntries = paged
+        .filter((tx): tx is Record<string, unknown> => tx !== null)
+        .map((tx) => ({
+          ...tx,
+          entries: entriesByTxId.get(tx.id as string) ?? [],
+        }));
 
       return ctx.json({
         transactions: txsWithEntries,

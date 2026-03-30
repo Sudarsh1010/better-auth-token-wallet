@@ -4,44 +4,22 @@ import {
   APIError,
 } from "better-auth/api";
 import * as z from "zod";
-import { createTransaction } from "../ledger/index.js";
-import { checkOrStore } from "../idempotency/index.js";
-import { creditBalance, getBalance } from "../balance/index.js";
-import { getOrCreateUserWallet } from "../wallet-account/index.js";
-import { SYSTEM_ACCOUNT_IDS, seedSystemAccounts } from "../system-accounts/index.js";
+import { credit } from "../wallet-service/index.js";
 import { TOKEN_WALLET_ERROR_CODES } from "../error-codes.js";
-import type { TokenWalletOptions, TopUpContext } from "../types.js";
-import type { WalletAdapter } from "../ledger/index.js";
+import type { TokenWalletErrorCode } from "../error-codes.js";
+import type { TokenWalletOptions } from "../types.js";
+import { getAdapter } from "../adapter.js";
 
-function getAdapter(ctx: {
-  context: Record<string, unknown>;
-}): WalletAdapter {
-  return ctx.context["adapter"] as unknown as WalletAdapter;
-}
-
-function rewriteError(error: Error): APIError | null {
-  const msg = error.message;
-  if (msg === TOKEN_WALLET_ERROR_CODES.INVALID_AMOUNT.code) {
-    return new APIError("BAD_REQUEST", {
-      ...TOKEN_WALLET_ERROR_CODES.INVALID_AMOUNT,
-    });
-  }
-  if (msg === TOKEN_WALLET_ERROR_CODES.MISSING_IDEMPOTENCY_KEY.code) {
-    return new APIError("BAD_REQUEST", {
-      ...TOKEN_WALLET_ERROR_CODES.MISSING_IDEMPOTENCY_KEY,
-    });
-  }
-  if (
-    msg === TOKEN_WALLET_ERROR_CODES.SYSTEM_ACCOUNT_MISSING.code ||
-    msg === TOKEN_WALLET_ERROR_CODES.CREDIT_FAILED.code
-  ) {
-    return new APIError("INTERNAL_SERVER_ERROR", {
-      code: msg,
-      message: TOKEN_WALLET_ERROR_CODES.CREDIT_FAILED.message,
-    });
-  }
-  return null;
-}
+const ERROR_STATUS_MAP = {
+  INVALID_AMOUNT: "BAD_REQUEST",
+  MISSING_IDEMPOTENCY_KEY: "BAD_REQUEST",
+  CONCURRENCY_CONFLICT: "CONFLICT",
+  SYSTEM_ACCOUNT_MISSING: "INTERNAL_SERVER_ERROR",
+  CREDIT_FAILED: "INTERNAL_SERVER_ERROR",
+  WALLET_NOT_FOUND: "INTERNAL_SERVER_ERROR",
+  DUPLICATE_IDEMPOTENCY_KEY: "INTERNAL_SERVER_ERROR",
+  ORG_NOT_SUPPORTED: "INTERNAL_SERVER_ERROR",
+} as const satisfies Record<TokenWalletErrorCode, string>;
 
 export function createCreditEndpoint(
   options?: TokenWalletOptions,
@@ -65,90 +43,27 @@ export function createCreditEndpoint(
 
       const user = session.user;
       const adapter = getAdapter(ctx);
-      const referenceKey = `user:${user.id}`;
       const { amount, idempotencyKey, metadata } = ctx.body;
 
-      try {
-        const result = await checkOrStore(
-          adapter,
+      const result = await credit(
+        adapter,
+        {
+          amount,
           idempotencyKey,
-          async () => {
-            await seedSystemAccounts(adapter);
+          metadata,
+          referenceKey: `user:${user.id}`,
+          userId: user.id as string,
+        },
+        options,
+      );
 
-            const userWallet = await getOrCreateUserWallet(
-              adapter,
-              referenceKey,
-              options?.wallet?.initialBalance ?? 0,
-            );
-
-            const revenueAccount = await adapter.findOne({
-              model: "walletAccount",
-              where: [{ field: "id", value: SYSTEM_ACCOUNT_IDS.REVENUE }],
-            });
-
-            if (!revenueAccount) {
-              throw new Error(
-                TOKEN_WALLET_ERROR_CODES.SYSTEM_ACCOUNT_MISSING.code,
-              );
-            }
-
-            const txResult = await createTransaction(adapter, {
-              idempotencyKey,
-              transactionType: "CREDIT_TOPUP",
-              entries: [
-                {
-                  accountId: SYSTEM_ACCOUNT_IDS.REVENUE,
-                  entryType: "DEBIT" as const,
-                  amount,
-                  balanceType: "posted" as const,
-                },
-                {
-                  accountId: userWallet.id,
-                  entryType: "CREDIT" as const,
-                  amount,
-                  balanceType: "posted" as const,
-                },
-              ],
-              ...(metadata !== undefined ? { metadata } : {}),
-              referenceKey,
-            });
-
-            await creditBalance(adapter, userWallet.id, amount);
-            await creditBalance(adapter, SYSTEM_ACCOUNT_IDS.REVENUE, amount);
-
-            if (options?.hooks?.onTopUp) {
-              await options.hooks.onTopUp({
-                transaction:
-                  txResult.transaction as unknown as TopUpContext["transaction"],
-                entries:
-                  txResult.entries as unknown as TopUpContext["entries"],
-                user: { id: user.id as string },
-                wallet: userWallet,
-              });
-            }
-
-            return {
-              transaction: txResult.transaction,
-              entries: txResult.entries,
-              userWallet,
-            };
-          },
-        );
-
-        const balance = await getBalance(adapter, referenceKey);
-
-        return ctx.json({
-          transaction: result.transaction,
-          entries: result.entries,
-          balance,
-        });
-      } catch (error) {
-        if (error instanceof Error) {
-          const apiError = rewriteError(error);
-          if (apiError) throw apiError;
-        }
-        throw error;
+      if (result.ok) {
+        return ctx.json(result.data);
       }
+
+      const status = ERROR_STATUS_MAP[result.error];
+      const errorInfo = TOKEN_WALLET_ERROR_CODES[result.error];
+      throw new APIError(status, errorInfo);
     },
   );
 }

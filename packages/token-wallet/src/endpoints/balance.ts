@@ -7,13 +7,7 @@ import * as z from "zod";
 import { getBalance } from "../balance/index.js";
 import { getOrCreateUserWallet } from "../wallet-account/index.js";
 import { TOKEN_WALLET_ERROR_CODES } from "../error-codes.js";
-import type { WalletAdapter } from "../ledger/index.js";
-
-function getAdapter(ctx: {
-  context: Record<string, unknown>;
-}): WalletAdapter {
-  return ctx.context["adapter"] as unknown as WalletAdapter;
-}
+import { getAdapter } from "../adapter.js";
 
 export function createBalanceEndpoint(): ReturnType<
   typeof createAuthEndpoint<any, any, any>
