@@ -1,7 +1,10 @@
 packages:
   - "packages/*"
-  - "packages/examples/*"
+  - "examples/*"
+  - "docs"
+
 linkWorkspacePackages: true
+
 catalog:
   typescript: "^5.8.0"
   better-auth: "^1.2.0"
