@@ -9,7 +9,7 @@ export function validateAmount(amount: number): void {
 }
 
 export async function creditBalance(
-  adapter: WalletAdapter,
+  adapter: Omit<WalletAdapter, "transaction">,
   accountId: string,
   amount: number,
 ): Promise<void> {
@@ -26,15 +26,30 @@ export async function creditBalance(
 
   const currentPosted = (account.postedBalance as number) ?? 0;
   const currentAvailable = (account.availableBalance as number) ?? 0;
+  const currentLockVersion = (account.lockVersion as number) ?? 0;
+  const expectedLockVersion = currentLockVersion + 1;
 
   await adapter.update({
     model: "walletAccount",
     update: {
       postedBalance: currentPosted + amount,
       availableBalance: currentAvailable + amount,
+      lockVersion: expectedLockVersion,
     },
+    where: [
+      { field: "id", value: accountId },
+      { field: "lockVersion", value: currentLockVersion },
+    ],
+  });
+
+  const updated = await adapter.findOne({
+    model: "walletAccount",
     where: [{ field: "id", value: accountId }],
   });
+
+  if (!updated || (updated.lockVersion as number) !== expectedLockVersion) {
+    throw new Error(TOKEN_WALLET_ERROR_CODES.CONCURRENCY_CONFLICT.code);
+  }
 }
 
 export async function getBalance(

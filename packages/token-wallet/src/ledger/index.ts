@@ -66,6 +66,7 @@ export async function createTransaction(
     referenceTxId?: string;
     referenceKey?: string;
   },
+  txAdapter?: Omit<WalletAdapter, "transaction">,
 ): Promise<{
   transaction: Record<string, unknown>;
   entries: Record<string, unknown>[];
@@ -84,7 +85,9 @@ export async function createTransaction(
     }
   }
 
-  return adapter.transaction(async (tx) => {
+  const execute = async (
+    tx: Omit<WalletAdapter, "transaction">,
+  ) => {
     const transactionData: Record<string, unknown> = {
       idempotencyKey: params.idempotencyKey,
       transactionType: params.transactionType,
@@ -121,5 +124,11 @@ export async function createTransaction(
     }
 
     return { transaction, entries: createdEntries };
-  });
+  };
+
+  if (txAdapter) {
+    return execute(txAdapter);
+  }
+
+  return adapter.transaction(execute);
 }
