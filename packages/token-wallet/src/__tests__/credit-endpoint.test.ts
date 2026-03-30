@@ -208,4 +208,21 @@ describe("credit endpoint", () => {
     const data = await res.json();
     expect(data.balance.posted).toBe(100);
   });
+
+  it("stores referenceKey on credit transaction", async () => {
+    const { auth } = createTestAuth();
+    const { cookies, userId } = await signUpDirect(auth);
+
+    const res = await callCredit(auth, cookies, {
+      amount: 100,
+      idempotencyKey: "refkey-test-1",
+    });
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+
+    // The credit endpoint response includes the transaction object
+    // referenceKey should be set to "user:{userId}"
+    expect(data.transaction.referenceKey).toBe(`user:${userId}`);
+  });
 });

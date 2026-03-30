@@ -8,6 +8,8 @@ export const tokenWalletClient = (): BetterAuthClientPlugin => {
     $InferServerPlugin: {} as ReturnType<typeof tokenWallet>,
     pathMethods: {
       "/token-wallet/credit": "POST" as const,
+      "/token-wallet/balance": "GET" as const,
+      "/token-wallet/transactions": "GET" as const,
     },
     $ERROR_CODES: TOKEN_WALLET_ERROR_CODES,
   };

@@ -10,3 +10,4 @@ out/
 !.changeset/README.md
 .vitest/
 coverage/
+.sisyphus/

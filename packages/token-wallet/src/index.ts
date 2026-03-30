@@ -3,6 +3,8 @@ import { createCustomSchema } from "./schema.js";
 import { TOKEN_WALLET_ERROR_CODES } from "./error-codes.js";
 import type { TokenWalletOptions } from "./types.js";
 import { createCreditEndpoint } from "./endpoints/credit.js";
+import { createTransactionsEndpoint } from "./endpoints/transactions.js";
+import { createBalanceEndpoint } from "./endpoints/balance.js";
 import { registerAutoCreateHook } from "./wallet-account/index.js";
 import { seedSystemAccounts } from "./system-accounts/index.js";
 import type { WalletAdapter } from "./ledger/index.js";
@@ -55,6 +57,8 @@ export const tokenWallet = (options?: TokenWalletOptions): BetterAuthPlugin => {
     },
     endpoints: {
       credit: createCreditEndpoint(options),
+      transactions: createTransactionsEndpoint(),
+      balance: createBalanceEndpoint(),
     },
     $Infer: {
       options: options as TokenWalletOptions | undefined,
@@ -71,6 +75,9 @@ export type {
   WalletEntry,
   WalletHold,
   WalletBalance,
+  BalanceResponse,
+  TransactionWithEntries,
+  TransactionsResponse,
   CreditRequest,
   CreditResponse,
   AccountType,

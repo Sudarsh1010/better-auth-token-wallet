@@ -93,6 +93,7 @@ export function buildSchema(
         },
         metadata: { type: "json", required: false },
         referenceTxId: { type: "string", required: false },
+        referenceKey: { type: "string", required: false },
         createdAt: {
           type: "date",
           required: true,

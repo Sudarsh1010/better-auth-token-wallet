@@ -110,6 +110,7 @@ export function createCreditEndpoint(
                 },
               ],
               ...(metadata !== undefined ? { metadata } : {}),
+              referenceKey,
             });
 
             await creditBalance(adapter, userWallet.id, amount);

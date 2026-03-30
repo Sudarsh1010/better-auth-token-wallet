@@ -68,6 +68,23 @@ export interface WalletBalance {
   available: number;
 }
 
+export interface BalanceResponse {
+  posted: number;
+  pending: number;
+  available: number;
+}
+
+export interface TransactionWithEntries extends WalletTransaction {
+  entries: WalletEntry[];
+}
+
+export interface TransactionsResponse {
+  transactions: TransactionWithEntries[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export type AccountType = "USER_WALLET" | "SYSTEM_REVENUE" | "SYSTEM_ESCROW" | "SYSTEM_RESERVE";
 export type TransactionType = "CREDIT_TOPUP" | "API_DEBIT" | "HOLD" | "CAPTURE" | "VOID" | "REFUND" | "ADJUSTMENT";
 export type EntryType = "DEBIT" | "CREDIT";

@@ -62,17 +62,18 @@ describe("tokenWallet plugin shape", () => {
     expect(plugin.$Infer!.options).toEqual(opts);
   });
 
-  it("has $ERROR_CODES with 6 codes", () => {
+  it("has $ERROR_CODES with 7 codes", () => {
     const plugin = tokenWallet();
     expect(plugin.$ERROR_CODES).toBeDefined();
     const codes = Object.keys(plugin.$ERROR_CODES!);
-    expect(codes).toHaveLength(6);
+    expect(codes).toHaveLength(7);
     expect(codes).toContain("WALLET_NOT_FOUND");
     expect(codes).toContain("INVALID_AMOUNT");
     expect(codes).toContain("DUPLICATE_IDEMPOTENCY_KEY");
     expect(codes).toContain("SYSTEM_ACCOUNT_MISSING");
     expect(codes).toContain("MISSING_IDEMPOTENCY_KEY");
     expect(codes).toContain("CREDIT_FAILED");
+    expect(codes).toContain("ORG_NOT_SUPPORTED");
   });
 
   it("endpoints has credit endpoint", () => {

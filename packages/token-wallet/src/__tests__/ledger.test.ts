@@ -212,3 +212,39 @@ describe("ledger: createTransaction", () => {
     ).rejects.toThrow("INVALID_AMOUNT");
   });
 });
+
+describe("ledger: createTransaction with referenceKey", () => {
+  it("stores referenceKey when provided", async () => {
+    const adapter = createTestAdapter();
+    await seedAccounts(adapter);
+
+    const result = await createTransaction(adapter, {
+      idempotencyKey: "refkey-001",
+      transactionType: "CREDIT_TOPUP",
+      entries: [
+        { accountId: "sys_revenue", entryType: "DEBIT", amount: 100, balanceType: "posted" },
+        { accountId: "user:test", entryType: "CREDIT", amount: 100, balanceType: "posted" },
+      ],
+      referenceKey: "user:abc123",
+    });
+
+    expect(result.transaction.referenceKey).toBe("user:abc123");
+  });
+
+  it("works without referenceKey (backward compatible)", async () => {
+    const adapter = createTestAdapter();
+    await seedAccounts(adapter);
+
+    const result = await createTransaction(adapter, {
+      idempotencyKey: "no-refkey-001",
+      transactionType: "CREDIT_TOPUP",
+      entries: [
+        { accountId: "sys_revenue", entryType: "DEBIT", amount: 50, balanceType: "posted" },
+        { accountId: "user:test", entryType: "CREDIT", amount: 50, balanceType: "posted" },
+      ],
+    });
+
+    expect(result.transaction).toBeDefined();
+    expect(result.transaction.referenceKey).toBeUndefined();
+  });
+});

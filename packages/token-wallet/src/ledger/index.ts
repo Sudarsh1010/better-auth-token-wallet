@@ -10,6 +10,9 @@ export interface WalletAdapter {
   findMany(args: {
     model: string;
     where?: Array<{ field: string; value: unknown }>;
+    sortBy?: { field: string; direction: "asc" | "desc" };
+    limit?: number;
+    offset?: number;
   }): Promise<Record<string, unknown>[]>;
 
   create(args: {
@@ -27,6 +30,11 @@ export interface WalletAdapter {
   transaction<T>(
     callback: (tx: Omit<WalletAdapter, "transaction">) => Promise<T>,
   ): Promise<T>;
+
+  count(args: {
+    model: string;
+    where?: Array<{ field: string; value: unknown }>;
+  }): Promise<number>;
 }
 
 export function validateBalance(
@@ -56,6 +64,7 @@ export async function createTransaction(
     }>;
     metadata?: Record<string, unknown>;
     referenceTxId?: string;
+    referenceKey?: string;
   },
 ): Promise<{
   transaction: Record<string, unknown>;
@@ -86,6 +95,9 @@ export async function createTransaction(
     }
     if (params.referenceTxId !== undefined) {
       transactionData.referenceTxId = params.referenceTxId;
+    }
+    if (params.referenceKey !== undefined) {
+      transactionData.referenceKey = params.referenceKey;
     }
 
     const transaction = await tx.create({
